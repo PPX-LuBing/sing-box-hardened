@@ -3261,10 +3261,10 @@ $(text 82) 2:
 https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2")
 
 $(hint "$(text 82) 1:")
-$(${WORK_DIR}/qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto)
+$(qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto)
 
 $(hint "$(text 82) 2:")
-$(${WORK_DIR}/qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
+$(qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
 "
 
   # 生成并显示节点信息
@@ -3274,7 +3274,7 @@ $(${WORK_DIR}/qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
 
 # 创建快捷方式
 create_shortcut() {
-  cp "\$0" "${WORK_DIR}/sing-box-hardened.sh"
+  cp "$0" "${WORK_DIR}/sing-box-hardened.sh"
   cat > ${WORK_DIR}/sb.sh << EOF
 #!/usr/bin/env bash
 bash ${WORK_DIR}/sing-box-hardened.sh \$1
