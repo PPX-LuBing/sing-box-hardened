@@ -3268,13 +3268,11 @@ $(qrencode -t UTF8 $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
 
 # 创建快捷方式
 create_shortcut() {
-  cp "$0" "${WORK_DIR}/sing-box-hardened.sh"
-  cat > ${WORK_DIR}/sb.sh << EOF
+  cat > /usr/bin/sb << EOF
 #!/usr/bin/env bash
-bash ${WORK_DIR}/sing-box-hardened.sh \$1
+bash <(curl -fsSL https://raw.githubusercontent.com/PPX-LuBing/sing-box-hardened/main/sing-box-hardened.sh) "\$@"
 EOF
-  chmod +x ${WORK_DIR}/sb.sh
-  ln -sf ${WORK_DIR}/sb.sh /usr/bin/sb
+  chmod +x /usr/bin/sb
   [ -s /usr/bin/sb ] && info "\n $(text 71) "
 }
 
