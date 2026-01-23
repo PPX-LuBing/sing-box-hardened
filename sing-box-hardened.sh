@@ -3155,10 +3155,10 @@ $(text 82) 2:
 https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2
 
 $(text 82) 1:
-$(qrencode "$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto")
+$(qrencode -t UTF8 "$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto")
 
 $(text 82) 2:
-$(qrencode "$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2")
+$(qrencode -t UTF8 "$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2")
 EOF
 
   # 生成配置文件
@@ -3255,10 +3255,10 @@ $(text 82) 2:
 https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2")
 
 $(hint "$(text 82) 1:")
-$(qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto)
+$(qrencode -t UTF8 $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto)
 
 $(hint "$(text 82) 2:")
-$(qrencode $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
+$(qrencode -t UTF8 $SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/auto2)
 "
 
   # 生成并显示节点信息
