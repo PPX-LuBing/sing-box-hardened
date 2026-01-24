@@ -290,21 +290,21 @@ menu() {
             2)
                 if [ "${STATUS[0]}" = "$(text 28)" ]; then cmd_systemctl disable sing-box; else cmd_systemctl enable sing-box; fi
                 menu 
-                ;;;
+                ;;
             3)
                 if [ -s ${ARGO_DAEMON_FILE} ]; then 
                     if [ "${STATUS[1]}" = "$(text 28)" ]; then cmd_systemctl disable argo; else cmd_systemctl enable argo; fi
                 fi
                 menu
-                ;;;
-            4) change_start_port; exit 0 ;;; 
-            5) change_protocols; exit 0 ;;; 
-            6) change_cdn; exit 0 ;;; 
-            7) version; exit 0 ;;; 
-            8) enable_bbr; menu ;;; 
-            9) disable_bbr; menu ;;; 
-            10) uninstall; exit 0 ;;; 
-            *) exit 0 ;;; 
+                ;;
+            4) change_start_port; exit 0 ;; 
+            5) change_protocols; exit 0 ;; 
+            6) change_cdn; exit 0 ;; 
+            7) version; exit 0 ;; 
+            8) enable_bbr; menu ;; 
+            9) disable_bbr; menu ;; 
+            10) uninstall; exit 0 ;; 
+            *) exit 0 ;; 
         esac
     else
         # Not Installed Menu
@@ -319,10 +319,10 @@ menu() {
                 export_list install
                 create_shortcut
                 exit 0
-                ;;;
+                ;;
             *) 
                 exit 0
-                ;;;
+                ;;
         esac
     fi
 }
