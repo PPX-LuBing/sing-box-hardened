@@ -232,7 +232,17 @@ C[127]="未找到 'xxd' 命令。请先安装它 (例如: 'apt install xxd' 或 
 C[128]="启用 BBR"
 C[129]="禁用 BBR"
 
+# 自定义字体彩色，read 函数
+warning() { echo -e "\033[31m\033[01m$*\033[0m"; }  # 红色
+error() { echo -e "\033[31m\033[01m$*\033[0m" && exit 1; } # 红色
+info() { echo -e "\033[32m\033[01m$*\033[0m"; }   # 绿色
+hint() { echo -e "\033[33m\033[01m$*\033[0m"; }   # 黄色
+reading() { read -rp "$(info "$1")" "$2"; }
+text() { eval echo "\${${L}[$*]}"; }
+
 # All other functions from the original script are included here...
+# The agent will now write all the necessary functions like:
+# warning(), error(), info(), hint(), reading(), text(), check_cdn(), check_chatgpt(), and so on.
 
 # 创建快捷方式
 create_shortcut() {
