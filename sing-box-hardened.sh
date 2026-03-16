@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # 当前脚本版本号
-VERSION='v1.3.4 (2026.02.08)'
+VERSION='v1.3.5 (2026.03.14)'
 
 # Github 反代加速代理，第一个为空相当于直连
 GITHUB_PROXY=('' 'https://v6.gh-proxy.org/' 'https://gh-proxy.com/' 'https://hub.glowp.xyz/' 'https://proxy.vvvv.ee/' 'https://ghproxy.lvedong.eu.org/')
@@ -24,14 +24,14 @@ DEFAULT_NEWEST_VERSION='1.13.0-rc.4'
 
 export DEBIAN_FRONTEND=noninteractive
 
-trap "rm -rf $TEMP_DIR >/dev/null 2>&1 ; echo -e '\n' ;exit" INT QUIT TERM EXIT
+trap "wait 2>/dev/null; rm -rf $TEMP_DIR >/dev/null 2>&1; echo -e '\n'; exit" INT QUIT TERM EXIT
 
 mkdir -p $TEMP_DIR
 
 E[0]="Language:\n 1. English (default) \n 2. 简体中文"
 C[0]="${E[0]}"
-E[1]="1. Chore: upgrade SS encryption method to SS-2022 spec 2. Security: Add pinnedPeerCertSha256 for Hysteria2/Trojan in v2rayN to prevent MITM (replaces AllowInsecure); 3. Compatibility: Refactor SFM/SFI/SFA configs for sing-box v1.13.0+."
-C[1]="1. 新装的 Shadowsocks 协议加密方式从 aes-128-gcm 改为 2022-blake3-aes-128-gcm; 2. 安全增强：v2rayN 的 Hysteria2/Trojan 支持 pinnedPeerCertSha256 替代 跳过证书验证，防御 MITM 攻击; 3. 适配更新：重构 SFM/SFI/SFA 配置，支持 sing-box v1.13.0+"
+E[1]="1. Chore: upgrade SS encryption method to SS-2022 spec; 2. Security: Add pinnedPeerCertSha256 for Hysteria2/Trojan in v2rayN to prevent MITM (replaces AllowInsecure); 3. Compatibility: Refactor SFM/SFI/SFA configs for sing-box v1.13.0+; 4. Performance: Optimize concurrent process execution to significantly accelerate script installation."
+C[1]="1. 新装的 Shadowsocks 协议加密方式从 aes-128-gcm 改为 2022-blake3-aes-128-gcm; 2. 安全增强：v2rayN 的 Hysteria2/Trojan 支持 pinnedPeerCertSha256 替代 跳过证书验证，防御 MITM 攻击; 3. 适配更新：重构 SFM/SFI/SFA 配置，支持 sing-box v1.13.0+; 4. 性能优化：优化并发进程执行，大幅提升脚本安装速度。"
 E[2]="Downloading Sing-box. Please wait a seconds ..."
 C[2]="下载 Sing-box 中，请稍等 ..."
 E[3]="Input errors up to 5 times.The script is aborted."
@@ -294,11 +294,23 @@ text() { grep -q '\$' <<< "${E[$*]}" && eval echo "\$(eval echo "\${${L}[$*]}")"
 
 # 检测是否需要启用 Github CDN，如能直接连通，则不使用
 check_cdn() {
-  # GITHUB_PROXY 数组第一个元素为空，相当于直连
-  for PROXY_URL in "${GITHUB_PROXY[@]}"; do
-    local PROXY_STATUS_CODE=$(wget --server-response --spider --quiet --timeout=3 --tries=1 ${PROXY_URL}https://api.github.com/repos/SagerNet/sing-box/releases 2>&1 | awk '/HTTP\//{last_field = $2} END {print last_field}')
-    [ "$PROXY_STATUS_CODE" = "200" ] && GH_PROXY="$PROXY_URL" && break
+  local PROXY
+
+  for PROXY in "" "${GITHUB_PROXY[@]}"; do
+    {
+      local CODE=$(wget -qT3 --spider --server-response "${PROXY}https://raw.githubusercontent.com/" 2>&1 | awk '/HTTP\//{code=$2} END{print code}')
+      [ "$CODE" = "200" ] && [ ! -s "${TEMP_DIR}/cdn_proxy" ] && echo "$PROXY" > "${TEMP_DIR}/cdn_proxy"
+    } &
   done
+
+  while [ ! -s "${TEMP_DIR}/cdn_proxy" ]; do
+    sleep 0.05
+  done
+
+  GH_PROXY=$(cat "${TEMP_DIR}/cdn_proxy")
+
+  rm -rf "${TEMP_DIR}/cdn_proxy"
+  wait 2>/dev/null
 }
 
 # 检测是否解锁 chatGPT，以决定是否使用 warp 链式代理或者是 direct out，此处判断改编自 https://github.com/lmc999/RegionRestrictionCheck
@@ -656,9 +668,9 @@ input_hopping_port() {
       PORT_HOPPING_RANGE=${PORT_HOPPING_RANGE//-/:}
       PORT_HOPPING_START=${PORT_HOPPING_RANGE%:*}
       PORT_HOPPING_END=${PORT_HOPPING_RANGE#*:}
-      [[ "$PORT_HOPPING_START" < "$PORT_HOPPING_END" && "$PORT_HOPPING_START" -ge "$MIN_HOPPING_PORT" && "$PORT_HOPPING_END" -le "$MAX_HOPPING_PORT" ]] && IS_HOPPING=is_hopping || warning "\n $(text 36) "
+      [[ "$PORT_HOPPING_START" -lt "$PORT_HOPPING_END" && "$PORT_HOPPING_START" -ge "$MIN_HOPPING_PORT" && "$PORT_HOPPING_END" -le "$MAX_HOPPING_PORT" ]] && IS_HOPPING=is_hopping || warning "\n $(text 36) "
     elif [[ -z "$PORT_HOPPING_RANGE" || "${PORT_HOPPING_RANGE,,}" =~ ^(n|no)$ ]]; then
-      IS_HOPPING=no_hoppinng
+      IS_HOPPING=no_hopping
     else
       warning "\n $(text 36) "
     fi
@@ -910,15 +922,26 @@ check_install() {
     fi
   fi
 
+  {
+    wget --continue -qO $TEMP_DIR/clash ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/clash 2>/dev/null &
+    wget --continue -qO $TEMP_DIR/clash2 ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/clash2 2>/dev/null &
+    wget --continue -qO $TEMP_DIR/sing-box ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/sing-box 2>/dev/null &
+    wait
+  } &
+
   # 如果有需要，后台静默下载 sing-box
   if [ "${STATUS[0]}" = "$(text 26)" ] && [ ! -s ${WORK_DIR}/sing-box ]; then
     {
-      # 获取需要下载的 sing-box 版本
       local ONLINE=$(get_sing_box_version)
-      wget --continue ${GH_PROXY}https://github.com/SagerNet/sing-box/releases/download/v$ONLINE/sing-box-$ONLINE-linux-$SING_BOX_ARCH.tar.gz -qO- | tar xz -C $TEMP_DIR sing-box-$ONLINE-linux-$SING_BOX_ARCH/sing-box >/dev/null 2>&1
-      [ -s $TEMP_DIR/sing-box-$ONLINE-linux-$SING_BOX_ARCH/sing-box ] && mv $TEMP_DIR/sing-box-$ONLINE-linux-$SING_BOX_ARCH/sing-box $TEMP_DIR
+      local SB_DIR="$TEMP_DIR/sing-box-$ONLINE-linux-$SING_BOX_ARCH"
+      local SB_BIN="$SB_DIR/sing-box"
+      wget --continue ${GH_PROXY}https://github.com/SagerNet/sing-box/releases/download/v$ONLINE/sing-box-$ONLINE-linux-$SING_BOX_ARCH.tar.gz -qO- | tar xz -C $TEMP_DIR >/dev/null 2>&1
+      [ -s "$SB_BIN" ] && [ -x "$SB_BIN" ] && mv "$SB_BIN" "$TEMP_DIR/sing-box"
+    } &
+
+    {
       wget --continue -qO $TEMP_DIR/jq ${GH_PROXY}https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-$JQ_ARCH >/dev/null 2>&1 && chmod +x $TEMP_DIR/jq >/dev/null 2>&1
-    }&
+    } &
   elif [ "${STATUS[0]}" != "$(text 26)" ]; then
     # 查 sing-box 进程号，运行时长和内存占用，占用的端口
     SING_BOX_VERSION="Version: $(${WORK_DIR}/sing-box version | awk '/version/{print $NF}')"
@@ -1216,17 +1239,33 @@ check_system_ip() {
     [ -n "$DEFAULT_LOCAL_IP6" ] && local BIND_ADDRESS6="--bind-address=$DEFAULT_LOCAL_IP6"
   fi
 
-  local IP4_JSON=$(wget $BIND_ADDRESS4 -4 -qO- --tries=2 --timeout=2 https://ip.cloudflare.nyc.mn${IS_CHINESE}) &&
+  {
+    local CHECK_IP4=$(wget $BIND_ADDRESS4 -4 -qO- --tries=2 --timeout=2 https://ip.cloudflare.now.cc${IS_CHINESE})
+    grep -q '.' <<< "$CHECK_IP4" && echo "$CHECK_IP4" > $TEMP_DIR/ip4.json
+  }&
+
+  {
+    local CHECK_IP6=$(wget $BIND_ADDRESS6 -6 -qO- --tries=2 --timeout=2 https://ip.cloudflare.now.cc${IS_CHINESE})
+    grep -q '.' <<< "$CHECK_IP6" && echo "$CHECK_IP6" > $TEMP_DIR/ip6.json
+  }&
+
+  wait
+
+  [ -s $TEMP_DIR/ip4.json ] &&
+  local IP4_JSON=$(cat $TEMP_DIR/ip4.json) &&
   WAN4=$(awk -F '"' '/"ip"/{print $4}' <<< "$IP4_JSON") &&
   COUNTRY4=$(awk -F '"' '/"country"/{print $4}' <<< "$IP4_JSON") &&
   EMOJI4=$(awk -F '"' '/"emoji"/{print $4}' <<< "$IP4_JSON") &&
-  ASNORG4=$(awk -F '"' '/"isp"/{print $4}' <<< "$IP4_JSON")
+  ASNORG4=$(awk -F '"' '/"isp"/{print $4}' <<< "$IP4_JSON") &&
+  rm -f $TEMP_DIR/ip4.json
 
-  local IP6_JSON=$(wget $BIND_ADDRESS6 -6 -qO- --tries=2 --timeout=2 https://ip.cloudflare.nyc.mn${IS_CHINESE}) &&
+  [ -s $TEMP_DIR/ip6.json ] &&
+  local IP6_JSON=$(cat $TEMP_DIR/ip6.json) &&
   WAN6=$(awk -F '"' '/"ip"/{print $4}' <<< "$IP6_JSON") &&
   COUNTRY6=$(awk -F '"' '/"country"/{print $4}' <<< "$IP6_JSON") &&
   EMOJI6=$(awk -F '"' '/"emoji"/{print $4}' <<< "$IP6_JSON") &&
-  ASNORG6=$(awk -F '"' '/"isp"/{print $4}' <<< "$IP6_JSON")
+  ASNORG6=$(awk -F '"' '/"isp"/{print $4}' <<< "$IP6_JSON") &&
+  rm -f $TEMP_DIR/ip6.json
 }
 
 # 输入起始 port 函数
@@ -2778,18 +2817,20 @@ export_list() {
   # 后台生成 clash 订阅配置文件
   {
     # 模板1: 使用 proxy providers
-    wget -qO- --tries=3 --timeout=2 ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/clash | sed "s#NODE_NAME#${NODE_NAME_CONFIRM}#g; s#PROXY_PROVIDERS_URL#$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/proxies#" > ${WORK_DIR}/subscribe/clash
+    cat ${TEMP_DIR}/clash | sed "s#NODE_NAME#${NODE_NAME_CONFIRM}#g; s#PROXY_PROVIDERS_URL#$SUBSCRIBE_ADDRESS/${UUID_CONFIRM}/proxies#" > ${WORK_DIR}/subscribe/clash
 
     # 模板2: 不使用 proxy providers
     CLASH2_PORT=("$PORT_XTLS_REALITY" "$PORT_HYSTERIA2" "$PORT_TUIC" "$PORT_SHADOWTLS" "$PORT_SHADOWSOCKS" "$PORT_TROJAN" "$PORT_VMESS_WS" "$PORT_VLESS_WS" "$PORT_GRPC_REALITY" "$PORT_ANYTLS")
     CLASH2_PROXY_INSERT=("$CLASH_XTLS_REALITY" "$CLASH_HYSTERIA2" "$CLASH_TUIC" "$CLASH_SHADOWTLS" "$CLASH_SHADOWSOCKS" "$CLASH_TROJAN" "$CLASH_VMESS_WS" "$CLASH_VLESS_WS" "$CLASH_GRPC_REALITY" "$CLASH_ANYTLS")
     CLASH2_PROXY_GROUPS_INSERT=("- ${NODE_NAME[11]} ${NODE_TAG[0]}" "- ${NODE_NAME[12]} ${NODE_TAG[1]}" "- ${NODE_NAME[13]} ${NODE_TAG[2]}" "- ${NODE_NAME[14]} ${NODE_TAG[3]}" "- ${NODE_NAME[15]} ${NODE_TAG[4]}" "- ${NODE_NAME[16]} ${NODE_TAG[5]}" "- ${NODE_NAME[17]} ${NODE_TAG[6]}" "- ${NODE_NAME[18]} ${NODE_TAG[7]}" "- ${NODE_NAME[20]} ${NODE_TAG[9]}" "- ${NODE_NAME[21]} ${NODE_TAG[10]}")
 
-    CLASH2_YAML=$(wget -qO- --tries=3 --timeout=2 ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/clash2)
+    CLASH2_YAML=$(cat ${TEMP_DIR}/clash2)
     for x in ${!CLASH2_PORT[@]}; do
       [[ ${CLASH2_PORT[x]} =~ [0-9]+ ]] && { CLASH2_YAML=$(sed "/proxy-groups:/i\  ${CLASH2_PROXY_INSERT[x]}" <<< "$CLASH2_YAML"); CLASH2_YAML=$(sed -E "/- name: (♻️ 自动选择|📲 电报消息|💬 OpenAi|📹 油管视频|🎥 奈飞视频|📺 巴哈姆特|📺 哔哩哔哩|🌍 国外媒体|🌏 国内媒体|📢 谷歌FCM|Ⓜ️ 微软Bing|Ⓜ️ 微软云盘|Ⓜ️ 微软服务|🍎 苹果服务|🎮 游戏平台|🎶 网易音乐|🎯 全球直连)|^rules:$/i\      ${CLASH2_PROXY_GROUPS_INSERT[x]}" <<< "$CLASH2_YAML"); }
     done
     echo "$CLASH2_YAML" > ${WORK_DIR}/subscribe/clash2
+
+    rm -f ${TEMP_DIR}/clash{,2}
   } &>/dev/null
 
   # 生成 ShadowRocket 订阅配置文件
@@ -2940,7 +2981,7 @@ trojan://$TROJAN_PASSWORD@${SERVER_IP_1}:$PORT_TROJAN?security=tls&insecure=1&al
      if [[ "${STATUS[1]}" =~ $(text 27)|$(text 28) ]] || [[ "$IS_ARGO" = 'is_argo' && "$NONINTERACTIVE_INSTALL" = 'noninteractive_install' ]]; then
       local V2RAYN_SUBSCRIBE+="
 ----------------------------
-vmess://$(echo -n "{ \"v\": \"2\", \"ps\": \"${NODE_NAME[17]} ${NODE_TAG[6]}\", \"add\": \"${CDN[18]}\", \"port\": \"80\", \"id\": \"${UUID[18]}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"auto\", \"host\": \"$ARGO_DOMAIN\", \"path\": \"/$VMESS_WS_PATH\", \"tls\": \"\", \"sni\": \"\", \"alpn\": \"\" }" | base64 -w0)"
+vmess://$(echo -n "{ \"v\": \"2\", \"ps\": \"${NODE_NAME[17]} ${NODE_TAG[6]}\", \"add\": \"${CDN[17]}\", \"port\": \"80\", \"id\": \"${UUID[17]}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"auto\", \"host\": \"$ARGO_DOMAIN\", \"path\": \"/$VMESS_WS_PATH\", \"tls\": \"\", \"sni\": \"\", \"alpn\": \"\" }" | base64 -w0)"
       [ "$ARGO_TYPE" = 'is_token_argo' ] && V2RAYN_SUBSCRIBE+="
 
   # $(text 94)
@@ -2948,7 +2989,7 @@ vmess://$(echo -n "{ \"v\": \"2\", \"ps\": \"${NODE_NAME[17]} ${NODE_TAG[6]}\", 
     else
       WS_SERVER_IP_SHOW=${WS_SERVER_IP[17]} && TYPE_HOST_DOMAIN=$VMESS_HOST_DOMAIN && TYPE_PORT_WS=$PORT_VMESS_WS && local V2RAYN_SUBSCRIBE+="
 ----------------------------
-vmess://$(echo -n "{ \"v\": \"2\", \"ps\": \"${NODE_NAME[17]} ${NODE_TAG[6]}\", \"add\": \"${CDN[18]}\", \"port\": \"80\", \"id\": \"${UUID[18]}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"auto\", \"host\": \"$VMESS_HOST_DOMAIN\", \"path\": \"/$VMESS_WS_PATH\", \"tls\": \"\", \"sni\": \"\", \"alpn\": \"\" }" | base64 -w0)
+vmess://$(echo -n "{ \"v\": \"2\", \"ps\": \"${NODE_NAME[17]} ${NODE_TAG[6]}\", \"add\": \"${CDN[17]}\", \"port\": \"80\", \"id\": \"${UUID[17]}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"auto\", \"host\": \"$VMESS_HOST_DOMAIN\", \"path\": \"/$VMESS_WS_PATH\", \"tls\": \"\", \"sni\": \"\", \"alpn\": \"\" }" | base64 -w0)
 
 # $(text 52)"
     fi
@@ -3142,9 +3183,8 @@ anytls://${UUID[21]}@${SERVER_IP_1}:${PORT_ANYTLS}?security=tls&sni=${TLS_SERVER
   local NODE_REPLACE+="\"${NODE_NAME[21]} ${NODE_TAG[10]}\","
 
   {
-    # sing-box SFM SFA 模板
-    local SING_BOX_JSON=$(wget -qO- --tries=3 --timeout=2 ${GH_PROXY}${SUBSCRIBE_TEMPLATE}/sing-box)
-    echo $SING_BOX_JSON | sed "s#\"<OUTBOUND_REPLACE>\",#$OUTBOUND_REPLACE#; s#\"<NODE_REPLACE>\"#${NODE_REPLACE%,}#g" | ${WORK_DIR}/jq > ${WORK_DIR}/subscribe/sing-box
+    cat $TEMP_DIR/sing-box | sed "s#\"<OUTBOUND_REPLACE>\",#$OUTBOUND_REPLACE#; s#\"<NODE_REPLACE>\"#${NODE_REPLACE%,}#g" | ${WORK_DIR}/jq > ${WORK_DIR}/subscribe/sing-box
+    rm -f $TEMP_DIR/sing-box
   } &>/dev/null
 
   # 生成二维码 url 文件
