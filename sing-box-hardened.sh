@@ -2638,9 +2638,15 @@ install_sing-box() {
   # 生成 sing-box systemd 配置文件
   sing-box_systemd
 
-  # 生成 Argo systemd 配置文件，并复制 cloudflared 可执行二进制文件
-  cp $TEMP_DIR/cloudflared ${WORK_DIR}
-  [ -n "$ARGO_RUNS" ] && argo_systemd
+  if [ -n "$ARGO_RUNS" ]; then
+    if [ -s "$TEMP_DIR/cloudflared" ]; then
+      cp "$TEMP_DIR/cloudflared" "${WORK_DIR}"
+    elif [ ! -s "${WORK_DIR}/cloudflared" ]; then
+      wget -qO "$TEMP_DIR/cloudflared" "${GH_PROXY}https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARGO_ARCH" >/dev/null 2>&1 && chmod +x "$TEMP_DIR/cloudflared" >/dev/null 2>&1 && cp "$TEMP_DIR/cloudflared" "${WORK_DIR}" || error "\n cloudflared download failed, script exits.\n"
+    fi
+
+    argo_systemd
+  fi
 
   # 如果是 Json Argo，把配置文件复制到工作目录
   [ -n "$ARGO_JSON" ] && cp $TEMP_DIR/tunnel.* ${WORK_DIR}
